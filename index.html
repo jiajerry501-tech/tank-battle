@@ -294,7 +294,7 @@ function spawnEnemy() {
 
 function initGame() {
   map = generateMap();
-  const playerStartX = (COLS * CELL - TANK_SIZE) / 2;
+  const playerStartX = CELL * 2;
   const playerStartY = PH + HUD_H - TANK_SIZE - 4;
   player = new Tank(playerStartX, playerStartY, UP, true);
 
@@ -318,7 +318,7 @@ function initGame() {
 document.addEventListener('keydown', e => {
   keys[e.key] = true;
   if (e.key === 'p' || e.key === 'P') { paused = !paused; return; }
-  if (e.key === 'r' || e.key === 'R') { if (gameOver || victory) initGame(); return; }
+  if (e.key === 'r' || e.key === 'R') { initGame(); return; }
   if (e.key === ' ' || e.key === 'Space') e.preventDefault();
 });
 
