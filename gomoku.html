@@ -152,8 +152,8 @@ function handleClick(e) {
     }
   }
 
-  // 点击距离必须在半格以内
-  if (minDist > CELL * 0.5 || board[bestR][bestC] !== EMPTY) return;
+  // 点击距离必须在半格对角线以内
+  if (minDist > Math.hypot(CELL / 2, CELL / 2) || board[bestR][bestC] !== EMPTY) return;
 
   // 落子
   board[bestR][bestC] = currentPlayer;
