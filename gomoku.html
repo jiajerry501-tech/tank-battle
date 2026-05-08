@@ -15,6 +15,16 @@ body {
   font-family: 'Courier New', monospace;
   overflow: hidden;
 }
+.back-link {
+  text-align: center;
+  margin-bottom: 8px;
+}
+.back-link a {
+  color: #8899bb;
+  font-size: 12px;
+  text-decoration: none;
+}
+.back-link a:hover { color: #4aec7e; }
 .game-wrapper {
   background: #16213e;
   padding: 20px;
@@ -130,6 +140,7 @@ canvas {
 </style>
 </head>
 <body>
+<div class="back-link"><a href="index.html">← 返回游戏列表</a></div>
 <div class="game-wrapper">
   <canvas id="boardCanvas"></canvas>
 
