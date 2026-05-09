@@ -13,7 +13,8 @@ body {
   align-items: center;
   min-height: 100vh;
   font-family: 'Courier New', monospace;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 .back-link {
   text-align: center;
@@ -32,12 +33,16 @@ body {
   box-shadow: 0 0 40px rgba(0,100,255,0.12), inset 0 0 20px rgba(0,0,0,0.5);
   border: 2px solid #2a3a5e;
   position: relative;
+  max-width: calc(100vw - 20px);
 }
 canvas {
   display: block;
   margin: 0 auto;
   border-radius: 4px;
   cursor: pointer;
+  max-width: 100%;
+  height: auto;
+  touch-action: manipulation;
 }
 .info-bar {
   display: flex;

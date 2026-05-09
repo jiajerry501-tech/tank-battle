@@ -13,7 +13,8 @@ body {
   align-items: center;
   min-height: 100vh;
   font-family: 'Courier New', monospace;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 .back-link {
   text-align: center;
@@ -32,6 +33,7 @@ body {
   box-shadow: 0 0 40px rgba(0,100,255,0.12), inset 0 0 20px rgba(0,0,0,0.5);
   border: 2px solid #2a3a5e;
   user-select: none;
+  max-width: calc(100vw - 20px);
 }
 .header {
   display: flex;
@@ -92,6 +94,9 @@ body {
 .board-container {
   display: flex;
   justify-content: center;
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 table {
   border-collapse: collapse;
@@ -129,6 +134,12 @@ td.mine { background: #ff6b6b; color: #1a1a2e; }
 td.flagged { background: #2a3a5e; }
 td.flagged::after { content: '⚑'; color: #ff6b6b; font-size: 18px; }
 td.mine-hit { background: #e74c3c; color: #fff; }
+@media (max-width: 500px) {
+  td { width: 26px; height: 26px; font-size: 13px; }
+  td.flagged::after { font-size: 15px; }
+  .counter { font-size: 18px; min-width: 40px; }
+  .game-wrapper { padding: 12px 10px; }
+}
 .controls {
   margin-top: 10px;
   color: #8899bb;
