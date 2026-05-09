@@ -1,0 +1,694 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>中国象棋 - Chinese Chess</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: #1a1a2e;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  font-family: 'Courier New', monospace;
+  overflow: hidden;
+}
+.back-link {
+  text-align: center;
+  margin-bottom: 8px;
+}
+.back-link a {
+  color: #8899bb;
+  font-size: 12px;
+  text-decoration: none;
+}
+.back-link a:hover { color: #4aec7e; }
+.game-wrapper {
+  background: #16213e;
+  padding: 20px;
+  border-radius: 12px;
+  box-shadow: 0 0 40px rgba(0,100,255,0.12), inset 0 0 20px rgba(0,0,0,0.5);
+  border: 2px solid #2a3a5e;
+  position: relative;
+}
+canvas {
+  display: block;
+  margin: 0 auto;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.info-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 12px;
+  color: #8899bb;
+  font-size: 14px;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.info-bar .turn { display: flex; align-items: center; gap: 8px; }
+.info-bar .status {
+  color: #ffd700;
+  font-weight: bold;
+  font-size: 15px;
+}
+.btn {
+  background: #2a3a5e;
+  color: #ffd700;
+  border: none;
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.btn:hover { background: #3a4a7e; }
+.btn-small { padding: 4px 10px; font-size: 12px; }
+
+.overlay {
+  display: flex;
+  position: absolute;
+  inset: 0;
+  background: rgba(13, 18, 30, 0.92);
+  border-radius: 12px;
+  z-index: 10;
+  justify-content: center;
+  align-items: center;
+}
+.overlay.hidden { display: none; }
+.modal {
+  text-align: center;
+  padding: 20px;
+}
+.modal h2 {
+  color: #ffd700;
+  font-size: 32px;
+  margin-bottom: 8px;
+  letter-spacing: 4px;
+}
+.modal p {
+  color: #8899bb;
+  font-size: 14px;
+  margin-bottom: 24px;
+}
+.modal .btn-mode {
+  display: block;
+  width: 220px;
+  margin: 10px auto;
+  padding: 14px 0;
+  font-size: 16px;
+  border: 2px solid #2a3a5e;
+  background: transparent;
+  color: #e0e8f0;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.25s;
+  font-family: inherit;
+}
+.modal .btn-mode:hover {
+  border-color: #ffd700;
+  color: #ffd700;
+  background: rgba(255,215,0,0.06);
+}
+.modal .btn-mode .sub {
+  display: block;
+  font-size: 12px;
+  color: #667799;
+  margin-top: 2px;
+}
+.modal .btn-mode:hover .sub { color: #8899bb; }
+</style>
+</head>
+<body>
+<div class="back-link"><a href="index.html">← 返回游戏列表</a></div>
+<div class="game-wrapper">
+  <canvas id="boardCanvas"></canvas>
+
+  <div class="overlay" id="startOverlay">
+    <div class="modal">
+      <h2>中 国 象 棋</h2>
+      <p>双人对战，轮流走棋</p>
+      <button class="btn-mode" onclick="startGame()">
+        开始游戏
+        <span class="sub">红方先行</span>
+      </button>
+    </div>
+  </div>
+
+  <div class="info-bar">
+    <div class="turn">
+      <span>当前:</span>
+      <span id="turnIndicator" style="display:inline-block;width:16px;height:16px;border-radius:50%;border:2px solid #666;"></span>
+      <span id="turnText">红方走棋</span>
+    </div>
+    <span class="status" id="statusText"></span>
+    <div style="display:flex;gap:6px;align-items:center;">
+      <button class="btn btn-small" onclick="initGame()">重开</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById('boardCanvas');
+const ctx = canvas.getContext('2d');
+const turnIndicator = document.getElementById('turnIndicator');
+const turnText = document.getElementById('turnText');
+const statusText = document.getElementById('statusText');
+const startOverlay = document.getElementById('startOverlay');
+
+const ROWS = 10, COLS = 9;
+const CELL = 56;
+const PAD = 40;
+const CW = PAD * 2 + (COLS - 1) * CELL;
+const CH = PAD * 2 + (ROWS - 1) * CELL;
+canvas.width = CW;
+canvas.height = CH;
+
+const RED = 1, BLACK = 2;
+const GENERAL = 'G', ADVISOR = 'A', ELEPHANT = 'E', HORSE = 'H', CHARIOT = 'C', CANNON = 'N', SOLDIER = 'S';
+
+const PIECE_CHAR = {
+  [RED]: { [GENERAL]: '帅', [ADVISOR]: '仕', [ELEPHANT]: '相', [HORSE]: '马', [CHARIOT]: '车', [CANNON]: '炮', [SOLDIER]: '兵' },
+  [BLACK]: { [GENERAL]: '将', [ADVISOR]: '士', [ELEPHANT]: '象', [HORSE]: '马', [CHARIOT]: '车', [CANNON]: '炮', [SOLDIER]: '卒' }
+};
+
+let board, currentPlayer, gameOver, selectedPos, validMoves, moveHistory, lastMove, inCheck, winner;
+
+function createInitialBoard() {
+  const b = Array.from({length: ROWS}, () => Array(COLS).fill(null));
+  const setup = (row, color, backRow) => {
+    b[row][0] = {type: CHARIOT, color};
+    b[row][1] = {type: HORSE, color};
+    b[row][2] = {type: ELEPHANT, color};
+    b[row][3] = {type: ADVISOR, color};
+    b[row][4] = {type: GENERAL, color};
+    b[row][5] = {type: ADVISOR, color};
+    b[row][6] = {type: ELEPHANT, color};
+    b[row][7] = {type: HORSE, color};
+    b[row][8] = {type: CHARIOT, color};
+  };
+  setup(0, BLACK, 0);
+  setup(9, RED, 9);
+  b[2][1] = {type: CANNON, color: BLACK};
+  b[2][7] = {type: CANNON, color: BLACK};
+  b[7][1] = {type: CANNON, color: RED};
+  b[7][7] = {type: CANNON, color: RED};
+  for (let c = 0; c < COLS; c += 2) {
+    b[3][c] = {type: SOLDIER, color: BLACK};
+    b[6][c] = {type: SOLDIER, color: RED};
+  }
+  return b;
+}
+
+function cx(c) { return PAD + c * CELL; }
+function cy(r) { return PAD + r * CELL; }
+function isOnBoard(r, c) { return r >= 0 && r < ROWS && c >= 0 && c < COLS; }
+function isInPalace(r, c, color) {
+  return c >= 3 && c <= 5 && (color === RED ? (r >= 7 && r <= 9) : (r >= 0 && r <= 2));
+}
+function isOnOwnSide(r, color) {
+  return color === RED ? r >= 5 : r <= 4;
+}
+function isFriendly(piece, color) {
+  return piece && piece.color === color;
+}
+function isEnemy(piece, color) {
+  return piece && piece.color !== color;
+}
+function cloneBoard(b) {
+  return b.map(row => row.map(p => p ? {...p} : null));
+}
+function findGeneral(b, color) {
+  for (let r = 0; r < ROWS; r++)
+    for (let c = 0; c < COLS; c++)
+      if (b[r][c] && b[r][c].type === GENERAL && b[r][c].color === color)
+        return {r, c};
+  return null;
+}
+
+// Flying general: check if two generals face each other on same column
+function generalsFacing(b, color) {
+  const g1 = findGeneral(b, color);
+  const g2 = findGeneral(b, color === RED ? BLACK : RED);
+  if (!g1 || !g2 || g1.c !== g2.c) return false;
+  const minR = Math.min(g1.r, g2.r);
+  const maxR = Math.max(g1.r, g2.r);
+  for (let r = minR + 1; r < maxR; r++)
+    if (b[r][g1.c]) return false;
+  return true;
+}
+
+function getRawMoves(b, row, col) {
+  const piece = b[row][col];
+  if (!piece) return [];
+  const {type, color} = piece;
+  const moves = [];
+  const addMove = (r, c) => { if (isOnBoard(r, c) && !isFriendly(b[r][c], color)) moves.push({r, c}); };
+
+  switch (type) {
+    case GENERAL: {
+      for (const [dr, dc] of [[0,1],[0,-1],[1,0],[-1,0]]) {
+        const nr = row + dr, nc = col + dc;
+        if (isInPalace(nr, nc, color)) addMove(nr, nc);
+      }
+      // Flying general "capture" — treat as attack so check logic works
+      const enemyColor = color === RED ? BLACK : RED;
+      const eg = findGeneral(b, enemyColor);
+      if (eg && eg.c === col) {
+        let blocked = false;
+        const minR = Math.min(row, eg.r), maxR = Math.max(row, eg.r);
+        for (let r = minR + 1; r < maxR; r++) { if (b[r][col]) { blocked = true; break; } }
+        if (!blocked) moves.push({r: eg.r, c: eg.c});
+      }
+      break;
+    }
+    case ADVISOR: {
+      for (const [dr, dc] of [[1,1],[1,-1],[-1,1],[-1,-1]]) {
+        const nr = row + dr, nc = col + dc;
+        if (isInPalace(nr, nc, color)) addMove(nr, nc);
+      }
+      break;
+    }
+    case ELEPHANT: {
+      for (const [dr, dc] of [[2,2],[2,-2],[-2,2],[-2,-2]]) {
+        const nr = row + dr, nc = col + dc;
+        const br = row + dr / 2, bc = col + dc / 2; // elephant eye
+        if (isOnBoard(nr, nc) && isOnOwnSide(nr, color) && !b[br][bc]) addMove(nr, nc);
+      }
+      break;
+    }
+    case HORSE: {
+      const jumps = [
+        {dr: -2, dc: -1, br: -1, bc: 0}, {dr: -2, dc: 1, br: -1, bc: 0},
+        {dr: 2, dc: -1, br: 1, bc: 0}, {dr: 2, dc: 1, br: 1, bc: 0},
+        {dr: -1, dc: -2, br: 0, bc: -1}, {dr: -1, dc: 2, br: 0, bc: 1},
+        {dr: 1, dc: -2, br: 0, bc: -1}, {dr: 1, dc: 2, br: 0, bc: 1}
+      ];
+      for (const j of jumps) {
+        const nr = row + j.dr, nc = col + j.dc;
+        if (isOnBoard(nr, nc) && !b[row + j.br][col + j.bc]) addMove(nr, nc);
+      }
+      break;
+    }
+    case CHARIOT: {
+      for (const [dr, dc] of [[0,1],[0,-1],[1,0],[-1,0]]) {
+        let nr = row + dr, nc = col + dc;
+        while (isOnBoard(nr, nc)) {
+          if (b[nr][nc]) { if (isEnemy(b[nr][nc], color)) moves.push({r: nr, c: nc}); break; }
+          moves.push({r: nr, c: nc});
+          nr += dr; nc += dc;
+        }
+      }
+      break;
+    }
+    case CANNON: {
+      for (const [dr, dc] of [[0,1],[0,-1],[1,0],[-1,0]]) {
+        let nr = row + dr, nc = col + dc;
+        let jumped = false;
+        while (isOnBoard(nr, nc)) {
+          if (!jumped) {
+            if (b[nr][nc]) jumped = true;
+            else moves.push({r: nr, c: nc});
+          } else {
+            if (b[nr][nc]) { if (isEnemy(b[nr][nc], color)) moves.push({r: nr, c: nc}); break; }
+          }
+          nr += dr; nc += dc;
+        }
+      }
+      break;
+    }
+    case SOLDIER: {
+      const forward = color === RED ? -1 : 1;
+      const fr = row + forward;
+      if (isOnBoard(fr, col)) addMove(fr, col);
+      const crossed = color === RED ? row <= 4 : row >= 5;
+      if (crossed) {
+        if (isOnBoard(row, col - 1)) addMove(row, col - 1);
+        if (isOnBoard(row, col + 1)) addMove(row, col + 1);
+      }
+      break;
+    }
+  }
+  return moves;
+}
+
+function isInCheck(b, color) {
+  const g = findGeneral(b, color);
+  if (!g) return true;
+  const enemy = color === RED ? BLACK : RED;
+  for (let r = 0; r < ROWS; r++)
+    for (let c = 0; c < COLS; c++)
+      if (b[r][c] && b[r][c].color === enemy)
+        for (const m of getRawMoves(b, r, c))
+          if (m.r === g.r && m.c === g.c) return true;
+  // Flying general (checked as attack from enemy general)
+  if (generalsFacing(b, color)) return true;
+  return false;
+}
+
+function wouldLeaveInCheck(b, fromR, fromC, toR, toC, color) {
+  const nb = cloneBoard(b);
+  nb[toR][toC] = nb[fromR][fromC];
+  nb[fromR][fromC] = null;
+  return isInCheck(nb, color);
+}
+
+function getValidMoves(b, row, col) {
+  const piece = b[row][col];
+  if (!piece) return [];
+  const raw = getRawMoves(b, row, col);
+  return raw.filter(m => !wouldLeaveInCheck(b, row, col, m.r, m.c, piece.color));
+}
+
+function getAllLegalMoves(b, color) {
+  const all = [];
+  for (let r = 0; r < ROWS; r++)
+    for (let c = 0; c < COLS; c++)
+      if (b[r][c] && b[r][c].color === color)
+        for (const m of getValidMoves(b, r, c))
+          all.push({fromR: r, fromC: c, toR: m.r, toC: m.c});
+  return all;
+}
+
+// ============ Game Logic ============
+
+function startGame() {
+  startOverlay.classList.add('hidden');
+  initGame();
+}
+
+function initGame() {
+  board = createInitialBoard();
+  currentPlayer = RED;
+  gameOver = false;
+  selectedPos = null;
+  validMoves = [];
+  moveHistory = [];
+  lastMove = null;
+  inCheck = false;
+  winner = null;
+  statusText.textContent = '';
+  updateTurnDisplay();
+  render();
+}
+
+function updateTurnDisplay() {
+  if (gameOver) {
+    turnIndicator.style.background = winner === RED ? '#cc3333' : winner === BLACK ? '#222' : '#666';
+    turnText.textContent = winner ? (winner === RED ? '红方胜利!' : '黑方胜利!') : '和棋!';
+    return;
+  }
+  turnIndicator.style.background = currentPlayer === RED ? '#cc3333' : '#222';
+  turnText.textContent = currentPlayer === RED ? '红方走棋' : '黑方走棋';
+  if (inCheck) {
+    turnText.textContent += ' 将军!';
+  }
+}
+
+function switchTurn() {
+  currentPlayer = currentPlayer === RED ? BLACK : RED;
+  inCheck = isInCheck(board, currentPlayer);
+  updateTurnDisplay();
+
+  // Check for checkmate/stalemate
+  if (getAllLegalMoves(board, currentPlayer).length === 0) {
+    gameOver = true;
+    winner = currentPlayer === RED ? BLACK : RED; // opponent wins
+    if (inCheck) {
+      statusText.textContent = (winner === RED ? '红方' : '黑方') + '胜 (将杀)!';
+    } else {
+      statusText.textContent = (winner === RED ? '红方' : '黑方') + '胜 (困毙)!';
+    }
+    updateTurnDisplay();
+    render();
+    return;
+  }
+
+  render();
+}
+
+function makeMove(fromR, fromC, toR, toC) {
+  if (gameOver) return;
+  const piece = board[fromR][fromC];
+  if (!piece || piece.color !== currentPlayer) return;
+
+  const move = {fromR, fromC, toR, toC, captured: board[toR][toC] ? {...board[toR][toC]} : null};
+  board[toR][toC] = piece;
+  board[fromR][fromC] = null;
+  lastMove = {fromR, fromC, toR, toC};
+  moveHistory.push(move);
+  selectedPos = null;
+  validMoves = [];
+  inCheck = false;
+  switchTurn();
+}
+
+function handleClick(e) {
+  if (gameOver) return;
+  const rect = canvas.getBoundingClientRect();
+  const mx = (e.clientX - rect.left) * (CW / rect.width);
+  const my = (e.clientY - rect.top) * (CH / rect.height);
+
+  // Find nearest intersection
+  let bestR = -1, bestC = -1, bestDist = Infinity;
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      const d = Math.hypot(mx - cx(c), my - cy(r));
+      if (d < bestDist) { bestDist = d; bestR = r; bestC = c; }
+    }
+  }
+
+  const threshold = CELL * 0.45;
+  if (bestDist > threshold) return;
+  const clickedPiece = board[bestR][bestC];
+
+  // If a piece is selected and clicking a valid move target
+  if (selectedPos) {
+    const target = validMoves.find(m => m.r === bestR && m.c === bestC);
+    if (target) {
+      makeMove(selectedPos.r, selectedPos.c, bestR, bestC);
+      return;
+    }
+  }
+
+  // Select own piece
+  if (clickedPiece && clickedPiece.color === currentPlayer) {
+    selectedPos = {r: bestR, c: bestC};
+    validMoves = getValidMoves(board, bestR, bestC);
+    render();
+    return;
+  }
+
+  // Deselect
+  selectedPos = null;
+  validMoves = [];
+  render();
+}
+
+// ============ Rendering ============
+
+function drawBoard() {
+  // Background
+  ctx.fillStyle = '#d4a95a';
+  ctx.fillRect(0, 0, CW, CH);
+
+  // Wood grain (subtle)
+  ctx.strokeStyle = 'rgba(180,140,70,0.15)';
+  ctx.lineWidth = 1;
+  for (let i = 0; i < CH; i += 6) {
+    ctx.beginPath();
+    ctx.moveTo(0, i + Math.sin(i * 0.05) * 3);
+    ctx.lineTo(CW, i + Math.sin(i * 0.05 + 1) * 3);
+    ctx.stroke();
+  }
+
+  // Outer border
+  ctx.strokeStyle = '#5c3d1a';
+  ctx.lineWidth = 2;
+  const bP = 14; // border padding
+  ctx.strokeRect(cx(0) - bP, cy(0) - bP, (COLS - 1) * CELL + bP * 2, (ROWS - 1) * CELL + bP * 2);
+
+  // Grid lines
+  ctx.strokeStyle = '#5c3d1a';
+  ctx.lineWidth = 1;
+  for (let i = 0; i < ROWS; i++) {
+    ctx.beginPath();
+    ctx.moveTo(cx(0), cy(i));
+    ctx.lineTo(cx(COLS - 1), cy(i));
+    ctx.stroke();
+  }
+  for (let i = 0; i < COLS; i++) {
+    // Top half (rows 0-4)
+    ctx.beginPath();
+    ctx.moveTo(cx(i), cy(0));
+    ctx.lineTo(cx(i), cy(4));
+    ctx.stroke();
+    // Bottom half (rows 5-9)
+    ctx.beginPath();
+    ctx.moveTo(cx(i), cy(5));
+    ctx.lineTo(cx(i), cy(9));
+    ctx.stroke();
+  }
+
+  // Palace diagonals
+  ctx.lineWidth = 1;
+  // Black palace (rows 0-2, cols 3-5)
+  ctx.beginPath();
+  ctx.moveTo(cx(3), cy(0)); ctx.lineTo(cx(5), cy(2));
+  ctx.moveTo(cx(5), cy(0)); ctx.lineTo(cx(3), cy(2));
+  ctx.stroke();
+  // Red palace (rows 7-9, cols 3-5)
+  ctx.beginPath();
+  ctx.moveTo(cx(3), cy(7)); ctx.lineTo(cx(5), cy(9));
+  ctx.moveTo(cx(5), cy(7)); ctx.lineTo(cx(3), cy(9));
+  ctx.stroke();
+
+  // River text
+  ctx.fillStyle = '#5c3d1a';
+  ctx.font = 'bold 20px "KaiTi", "STKaiti", "楷体", serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const riverY = (cy(4) + cy(5)) / 2;
+  ctx.fillText('楚 河', cx(2), riverY);
+  ctx.fillText('漢 界', cx(6), riverY);
+}
+
+function drawPieces() {
+  const radius = CELL * 0.4;
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      const p = board[r][c];
+      if (!p) continue;
+      const x = cx(c), y = cy(r);
+
+      // Shadow
+      ctx.fillStyle = 'rgba(0,0,0,0.2)';
+      ctx.beginPath();
+      ctx.arc(x + 2, y + 2, radius, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Piece body
+      const grad = ctx.createRadialGradient(x - 4, y - 4, 2, x, y, radius);
+      grad.addColorStop(0, '#fdf5e6');
+      grad.addColorStop(1, '#d4b896');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(x, y, radius, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Border
+      ctx.strokeStyle = '#8b6914';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      // Inner ring
+      ctx.strokeStyle = p.color === RED ? '#cc3333' : '#222';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(x, y, radius - 4, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // Character
+      ctx.fillStyle = p.color === RED ? '#cc3333' : '#222';
+      ctx.font = `bold ${Math.round(radius * 1.2)}px "KaiTi", "STKaiti", "楷体", "SimSun", serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(PIECE_CHAR[p.color][p.type], x, y + 1);
+    }
+  }
+
+  // Last move highlight
+  if (lastMove) {
+    ctx.strokeStyle = 'rgba(255,215,0,0.5)';
+    ctx.lineWidth = 3;
+    for (const p of [{r: lastMove.fromR, c: lastMove.fromC}, {r: lastMove.toR, c: lastMove.toC}]) {
+      ctx.strokeRect(cx(p.c) - radius, cy(p.r) - radius, radius * 2, radius * 2);
+    }
+  }
+}
+
+function drawSelection() {
+  if (!selectedPos) return;
+  const x = cx(selectedPos.c), y = cy(selectedPos.r);
+  const radius = CELL * 0.42;
+
+  ctx.strokeStyle = '#4aec7e';
+  ctx.lineWidth = 3;
+  ctx.setLineDash([5, 5]);
+  ctx.beginPath();
+  ctx.arc(x, y, radius + 3, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Valid move indicators
+  for (const m of validMoves) {
+    const mx = cx(m.c), my = cy(m.r);
+    const target = board[m.r][m.c];
+    if (target) {
+      // Capture indicator: ring around target
+      ctx.strokeStyle = 'rgba(255,68,68,0.6)';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(mx, my, CELL * 0.4 + 3, 0, Math.PI * 2);
+      ctx.stroke();
+    } else {
+      // Move indicator: small dot
+      ctx.fillStyle = 'rgba(74,236,126,0.5)';
+      ctx.beginPath();
+      ctx.arc(mx, my, 6, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  // Check indicator
+  if (inCheck) {
+    const g = findGeneral(board, currentPlayer);
+    if (g) {
+      ctx.strokeStyle = '#ff4444';
+      ctx.lineWidth = 4;
+      ctx.shadowColor = '#ff4444';
+      ctx.shadowBlur = 12;
+      ctx.beginPath();
+      ctx.arc(cx(g.c), cy(g.r), CELL * 0.42, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+    }
+  }
+}
+
+function render() {
+  drawBoard();
+  drawPieces();
+  drawSelection();
+}
+
+canvas.addEventListener('click', handleClick);
+
+// Keyboard shortcuts
+document.addEventListener('keydown', e => {
+  if (e.key === 'r' || e.key === 'R') { initGame(); }
+  if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !gameOver && moveHistory.length > 0) {
+    const last = moveHistory.pop();
+    board[last.fromR][last.fromC] = board[last.toR][last.toC];
+    board[last.toR][last.toC] = last.captured;
+    currentPlayer = currentPlayer === RED ? BLACK : RED;
+    selectedPos = null;
+    validMoves = [];
+    inCheck = isInCheck(board, currentPlayer);
+    lastMove = moveHistory.length > 0 ? moveHistory[moveHistory.length - 1] : null;
+    // After undo, also need to switch back
+    currentPlayer = currentPlayer === RED ? BLACK : RED;
+    updateTurnDisplay();
+    render();
+    e.preventDefault();
+  }
+});
+
+startOverlay.classList.remove('hidden');
+</script>
+</body>
+</html>
