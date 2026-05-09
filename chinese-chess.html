@@ -128,13 +128,17 @@ canvas {
 <div class="game-wrapper">
   <canvas id="boardCanvas"></canvas>
 
-  <div class="overlay" id="startOverlay">
+  <div class="overlay" id="modeOverlay">
     <div class="modal">
       <h2>中 国 象 棋</h2>
-      <p>双人对战，轮流走棋</p>
-      <button class="btn-mode" onclick="startGame()">
-        开始游戏
-        <span class="sub">红方先行</span>
+      <p>选择游戏模式</p>
+      <button class="btn-mode" onclick="startGame('pvp')">
+        双人对战
+        <span class="sub">两名玩家轮流走棋</span>
+      </button>
+      <button class="btn-mode" onclick="startGame('pve')">
+        人机对战
+        <span class="sub">与电脑 AI 对战</span>
       </button>
     </div>
   </div>
@@ -147,6 +151,8 @@ canvas {
     </div>
     <span class="status" id="statusText"></span>
     <div style="display:flex;gap:6px;align-items:center;">
+      <span class="mode-tag" id="modeTag" style="font-size:12px;color:#4aec7e;background:rgba(74,236,126,0.1);padding:2px 8px;border-radius:4px;">PvP</span>
+      <button class="btn btn-small" onclick="showModeSelect()">切换模式</button>
       <button class="btn btn-small" onclick="initGame()">重开</button>
     </div>
   </div>
@@ -158,7 +164,8 @@ const ctx = canvas.getContext('2d');
 const turnIndicator = document.getElementById('turnIndicator');
 const turnText = document.getElementById('turnText');
 const statusText = document.getElementById('statusText');
-const startOverlay = document.getElementById('startOverlay');
+const modeTag = document.getElementById('modeTag');
+const modeOverlay = document.getElementById('modeOverlay');
 
 const ROWS = 10, COLS = 9;
 const CELL = 56;
@@ -176,7 +183,7 @@ const PIECE_CHAR = {
   [BLACK]: { [GENERAL]: '将', [ADVISOR]: '士', [ELEPHANT]: '象', [HORSE]: '马', [CHARIOT]: '车', [CANNON]: '炮', [SOLDIER]: '卒' }
 };
 
-let board, currentPlayer, gameOver, selectedPos, validMoves, moveHistory, lastMove, inCheck, winner;
+let board, currentPlayer, gameOver, selectedPos, validMoves, moveHistory, lastMove, inCheck, winner, gameMode, aiThinking;
 
 function createInitialBoard() {
   const b = Array.from({length: ROWS}, () => Array(COLS).fill(null));
@@ -374,10 +381,117 @@ function getAllLegalMoves(b, color) {
   return all;
 }
 
+// ============ AI Module ============
+const PIECE_VAL = {
+  [GENERAL]: 10000, [CHARIOT]: 1000, [CANNON]: 500, [HORSE]: 450,
+  [ADVISOR]: 200, [ELEPHANT]: 200, [SOLDIER]: 100
+};
+
+function opponent(color) { return color === RED ? BLACK : RED; }
+
+function evaluateBoard(b, color) {
+  let score = 0;
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      const p = b[r][c];
+      if (!p) continue;
+      const v = PIECE_VAL[p.type];
+      // Positional bonus (from Red's perspective, row-flipped for Black)
+      const pr = p.color === RED ? r : 9 - r;
+      let bonus = 0;
+      bonus += (4 - Math.abs(c - 4)) * 3; // center preference
+      if (p.type !== GENERAL) bonus += Math.max(0, 9 - pr) * 2; // advancement
+      if (p.type === HORSE) bonus += Math.max(0, 20 - Math.abs(c - 4) * 4 - Math.abs(pr - 4.5) * 3);
+      if (p.type === SOLDIER && pr <= 4) bonus += (4 - pr) * 18 + 20 + (4 - Math.abs(c - 4)) * 6;
+      if (p.type === CHARIOT) bonus += Math.max(0, 9 - pr - 3) * 5;
+      score += (p.color === color ? 1 : -1) * (v + bonus);
+    }
+  }
+  return score;
+}
+
+function getAllRawMoves(b, color) {
+  const all = [];
+  for (let r = 0; r < ROWS; r++)
+    for (let c = 0; c < COLS; c++)
+      if (b[r][c] && b[r][c].color === color)
+        for (const m of getRawMoves(b, r, c))
+          all.push({fromR: r, fromC: c, toR: m.r, toC: m.c});
+  return all;
+}
+
+function sortMoves(b, moves) {
+  moves.sort((a, bm) => {
+    const aCap = board[a.toR][a.toC] ? PIECE_VAL[board[a.toR][a.toC].type] : 0;
+    const bCap = board[bm.toR][bm.toC] ? PIECE_VAL[board[bm.toR][bm.toC].type] : 0;
+    return bCap - aCap;
+  });
+}
+
+function alphaBeta(b, depth, alpha, beta, color) {
+  if (depth === 0) return evaluateBoard(b, color);
+
+  const moves = getAllRawMoves(b, color);
+  sortMoves(b, moves);
+  let legalCount = 0;
+
+  for (const m of moves) {
+    const captured = b[m.toR][m.toC];
+    const piece = b[m.fromR][m.fromC];
+    b[m.toR][m.toC] = piece;
+    b[m.fromR][m.fromC] = null;
+
+    if (!isInCheck(b, color)) {
+      legalCount++;
+      const score = -alphaBeta(b, depth - 1, -beta, -alpha, opponent(color));
+      if (score > alpha) alpha = score;
+    }
+
+    b[m.fromR][m.fromC] = piece;
+    b[m.toR][m.toC] = captured;
+    if (alpha >= beta) break;
+  }
+
+  if (legalCount === 0) {
+    return isInCheck(b, color) ? -(100000 - depth) : -99999;
+  }
+  return alpha;
+}
+
+function getAIMove() {
+  const moves = getAllRawMoves(board, currentPlayer);
+  let bestMove = null, alpha = -Infinity;
+  sortMoves(board, moves);
+
+  for (const m of moves) {
+    const captured = board[m.toR][m.toC];
+    const piece = board[m.fromR][m.fromC];
+    board[m.toR][m.toC] = piece;
+    board[m.fromR][m.fromC] = null;
+
+    let score = -Infinity;
+    if (!isInCheck(board, currentPlayer)) {
+      score = -alphaBeta(board, 2, -Infinity, -alpha, opponent(currentPlayer));
+    }
+
+    board[m.fromR][m.fromC] = piece;
+    board[m.toR][m.toC] = captured;
+
+    if (score > alpha) { alpha = score; bestMove = m; }
+  }
+  return bestMove;
+}
+
 // ============ Game Logic ============
 
-function startGame() {
-  startOverlay.classList.add('hidden');
+function showModeSelect() {
+  modeOverlay.classList.remove('hidden');
+}
+
+function startGame(mode) {
+  gameMode = mode;
+  modeTag.textContent = mode === 'pvp' ? 'PvP' : 'PvE';
+  modeOverlay.classList.add('hidden');
   initGame();
 }
 
@@ -391,6 +505,7 @@ function initGame() {
   lastMove = null;
   inCheck = false;
   winner = null;
+  aiThinking = false;
   statusText.textContent = '';
   updateTurnDisplay();
   render();
@@ -402,10 +517,22 @@ function updateTurnDisplay() {
     turnText.textContent = winner ? (winner === RED ? '红方胜利!' : '黑方胜利!') : '和棋!';
     return;
   }
+  if (aiThinking) {
+    turnIndicator.style.background = '#222';
+    turnText.textContent = 'AI 思考中...';
+    return;
+  }
   turnIndicator.style.background = currentPlayer === RED ? '#cc3333' : '#222';
   turnText.textContent = currentPlayer === RED ? '红方走棋' : '黑方走棋';
-  if (inCheck) {
-    turnText.textContent += ' 将军!';
+  if (inCheck) turnText.textContent += ' 将军!';
+}
+
+function doAIMove() {
+  if (gameOver) { aiThinking = false; return; }
+  const move = getAIMove();
+  aiThinking = false;
+  if (move) {
+    makeMove(move.fromR, move.fromC, move.toR, move.toC);
   }
 }
 
@@ -417,7 +544,7 @@ function switchTurn() {
   // Check for checkmate/stalemate
   if (getAllLegalMoves(board, currentPlayer).length === 0) {
     gameOver = true;
-    winner = currentPlayer === RED ? BLACK : RED; // opponent wins
+    winner = currentPlayer === RED ? BLACK : RED;
     if (inCheck) {
       statusText.textContent = (winner === RED ? '红方' : '黑方') + '胜 (将杀)!';
     } else {
@@ -429,6 +556,13 @@ function switchTurn() {
   }
 
   render();
+
+  // PvE: trigger AI turn after a short delay
+  if (gameMode === 'pve' && currentPlayer === BLACK) {
+    aiThinking = true;
+    updateTurnDisplay();
+    setTimeout(doAIMove, 200);
+  }
 }
 
 function makeMove(fromR, fromC, toR, toC) {
@@ -448,7 +582,8 @@ function makeMove(fromR, fromC, toR, toC) {
 }
 
 function handleClick(e) {
-  if (gameOver) return;
+  if (gameOver || aiThinking) return;
+  if (gameMode === 'pve' && currentPlayer === BLACK) return;
   const rect = canvas.getBoundingClientRect();
   const mx = (e.clientX - rect.left) * (CW / rect.width);
   const my = (e.clientY - rect.top) * (CH / rect.height);
@@ -671,11 +806,14 @@ canvas.addEventListener('click', handleClick);
 // Keyboard shortcuts
 document.addEventListener('keydown', e => {
   if (e.key === 'r' || e.key === 'R') { initGame(); }
-  if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !gameOver && moveHistory.length > 0) {
-    const last = moveHistory.pop();
-    board[last.fromR][last.fromC] = board[last.toR][last.toC];
-    board[last.toR][last.toC] = last.captured;
-    currentPlayer = currentPlayer === RED ? BLACK : RED;
+  if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !gameOver && !aiThinking && moveHistory.length > 0) {
+    const steps = gameMode === 'pve' ? 2 : 1;
+    for (let i = 0; i < steps && moveHistory.length > 0; i++) {
+      const last = moveHistory.pop();
+      board[last.fromR][last.fromC] = board[last.toR][last.toC];
+      board[last.toR][last.toC] = last.captured;
+      currentPlayer = currentPlayer === RED ? BLACK : RED;
+    }
     selectedPos = null;
     validMoves = [];
     inCheck = isInCheck(board, currentPlayer);
@@ -686,7 +824,7 @@ document.addEventListener('keydown', e => {
   }
 });
 
-startOverlay.classList.remove('hidden');
+showModeSelect();
 </script>
 </body>
 </html>
