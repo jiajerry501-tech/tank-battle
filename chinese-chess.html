@@ -680,8 +680,6 @@ document.addEventListener('keydown', e => {
     validMoves = [];
     inCheck = isInCheck(board, currentPlayer);
     lastMove = moveHistory.length > 0 ? moveHistory[moveHistory.length - 1] : null;
-    // After undo, also need to switch back
-    currentPlayer = currentPlayer === RED ? BLACK : RED;
     updateTurnDisplay();
     render();
     e.preventDefault();
