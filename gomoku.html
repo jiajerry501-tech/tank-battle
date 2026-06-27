@@ -142,6 +142,37 @@ canvas {
   margin-top: 2px;
 }
 .modal .btn-mode:hover .sub { color: #8899bb; }
+.help-toggle {
+  display: block;
+  margin: 10px auto 0;
+  background: none;
+  border: 1px solid #2a3a5e;
+  color: #667799;
+  padding: 4px 14px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.help-toggle:hover { border-color: #4aec7e; color: #4aec7e; }
+.help-panel {
+  display: none;
+  margin-top: 10px;
+  padding: 14px 18px;
+  background: rgba(13,27,42,0.6);
+  border: 1px solid #2a3a5e;
+  border-radius: 8px;
+  color: #8899bb;
+  font-size: 12px;
+  line-height: 1.9;
+  text-align: left;
+}
+.help-panel.show { display: block; }
+.help-panel h3 { color: #4aec7e; font-size: 13px; margin-bottom: 6px; letter-spacing: 1px; }
+.help-panel ul { padding-left: 18px; margin: 4px 0; }
+.help-panel li { margin: 2px 0; }
+.help-panel .key { color: #4aec7e; font-weight: bold; }
 </style>
 </head>
 <body>
@@ -177,6 +208,32 @@ canvas {
       <button class="btn btn-small" onclick="showModeSelect()">切换模式</button>
       <button class="btn btn-small" onclick="initGame()">重开</button>
     </div>
+  </div>
+  <button class="help-toggle" onclick="document.getElementById('helpPanel').classList.toggle('show')">游戏说明</button>
+  <div class="help-panel" id="helpPanel">
+    <h3>游戏模式</h3>
+    <ul>
+      <li><span class="key">双人对战 (PvP)</span>：两名玩家轮流落子</li>
+      <li><span class="key">人机对战 (PvE)</span>：与电脑 AI 对战，AI 使用白棋</li>
+    </ul>
+    <h3>游戏规则</h3>
+    <ul>
+      <li>15×15 棋盘，<span class="key">黑棋先行</span></li>
+      <li>在棋盘交叉点上落子，先将 <span class="key">5 颗同色棋子连成一线</span>（横/竖/斜）者获胜</li>
+      <li>棋盘下满无人连五则为平局</li>
+    </ul>
+    <h3>操作方式</h3>
+    <ul>
+      <li><span class="key">鼠标点击</span>交叉点落子</li>
+      <li><span class="key">Ctrl+Z</span>：悔棋（人机模式会撤回双方各一步）</li>
+      <li><span class="key">R</span>：重新开局</li>
+    </ul>
+    <h3>AI 说明</h3>
+    <ul>
+      <li>AI 会评估每个候选位置的进攻和防守得分</li>
+      <li>优先选择攻防兼备的最佳位置</li>
+      <li>同分位置随机选择，增加变化</li>
+    </ul>
   </div>
 </div>
 <script>

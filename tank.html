@@ -51,6 +51,37 @@ canvas {
   text-decoration: none;
 }
 .back-link a:hover { color: #4aec7e; }
+.help-toggle {
+  display: block;
+  margin: 10px auto 0;
+  background: none;
+  border: 1px solid #2a3a5e;
+  color: #667799;
+  padding: 4px 14px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.help-toggle:hover { border-color: #4aec7e; color: #4aec7e; }
+.help-panel {
+  display: none;
+  margin-top: 10px;
+  padding: 14px 18px;
+  background: rgba(13,27,42,0.6);
+  border: 1px solid #2a3a5e;
+  border-radius: 8px;
+  color: #8899bb;
+  font-size: 12px;
+  line-height: 1.9;
+  text-align: left;
+}
+.help-panel.show { display: block; }
+.help-panel h3 { color: #4aec7e; font-size: 13px; margin-bottom: 6px; letter-spacing: 1px; }
+.help-panel ul { padding-left: 18px; margin: 4px 0; }
+.help-panel li { margin: 2px 0; }
+.help-panel .key { color: #4aec7e; font-weight: bold; }
 </style>
 </head>
 <body>
@@ -59,6 +90,29 @@ canvas {
   <canvas id="gameCanvas"></canvas>
   <div class="controls">
     <span>↑↓←→</span> 移动 &nbsp;|&nbsp; <span>空格</span> 开火 &nbsp;|&nbsp; <span>P</span> 暂停 &nbsp;|&nbsp; <span>R</span> 重新开始
+  </div>
+  <button class="help-toggle" onclick="document.getElementById('helpPanel').classList.toggle('show')">游戏说明</button>
+  <div class="help-panel" id="helpPanel">
+    <h3>游戏规则</h3>
+    <ul>
+      <li>消灭全部 <span class="key">20 辆敌军坦克</span> 即可获胜</li>
+      <li>保护地图底部的 <span class="key">★ 基地</span>，基地被击中则游戏结束</li>
+      <li>玩家有 <span class="key">3 条命</span>，被击中后会在原位重生（短暂无敌）</li>
+      <li>场上最多同时存在 <span class="key">4 辆敌坦克</span>，每隔一段时间从顶部刷新</li>
+    </ul>
+    <h3>地形说明</h3>
+    <ul>
+      <li><span class="key">砖墙</span>（棕色）：可被子弹摧毁</li>
+      <li><span class="key">钢墙</span>（灰色）：子弹无法穿透</li>
+      <li><span class="key">基地</span>（★）：被摧毁则游戏失败</li>
+    </ul>
+    <h3>操作方式</h3>
+    <ul>
+      <li><span class="key">↑↓←→</span> / <span class="key">WASD</span>：移动坦克</li>
+      <li><span class="key">空格</span>：开火射击</li>
+      <li><span class="key">P</span>：暂停 / 继续</li>
+      <li><span class="key">R</span>：重新开始</li>
+    </ul>
   </div>
 </div>
 <script>
